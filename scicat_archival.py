@@ -6,16 +6,17 @@ import urllib.parse
 class ArchivalMockException(Exception):
     pass
 
-def check_request_response(r: requests.Response, msg: str):
+def check_request_response(r: requests.Response, msg: str) -> None:
     if not r.status_code == 200:
         raise ArchivalMockException("{}: {} - {}".format(msg, r.status_code, r.reason))
 
+# simulates dataIngestion for creating the job
 def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: str = "", 
                dataset_files: list[str] = [], dataset_list: Union[None, list] = None) -> None:
     # NOTE: if you want to send more than one dataset per job, you must use dataset_list
     #   otherwise use dataset pid and dataset files for a "general case"
-    # NOTE: when creating an archival (and likely retrieval) job, the datasetLifecycle is automatically updated by
-    #   scicat! 
+    # NOTE: when creating an archival job, the datasetLifecycle is automatically updated by
+    #   scicat to mark it as non-archivable!
     if dataset_list is None:
         job_json = {
             "type": "retrieve" if retrieval else "archive",
@@ -36,6 +37,7 @@ def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: 
     check_request_response(r, "can't create job")
     return r.json().get('id')
 
+# simulates node-red/mq for forwarding jobs
 def forward_job(base_url: str, token: str, job_id: str) -> tuple[str, list[dict]]:
     access_token = {'access_token': token}
     r = requests.get(url=base_url+'/Jobs/datasetDetails', params={'jobId': job_id} | access_token)
@@ -61,8 +63,7 @@ def check_dataset(dataset: dict, archivable: bool = False, retrievable: bool = F
            (retrievable == dataset_lifecycle.get('retrievable'))):
         raise ArchivalMockException("dataset is incompatible with desired operation: {}".format(dataset))
 
-
-
+# simulates AREMA for archival registering
 def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
     access_token = {'access_token': token}
     for dataset in datasets:
@@ -113,3 +114,28 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
                      params=access_token)
     check_request_response(r, "can't mark job as finished")
     return
+
+# NOTE: this function is untested for now
+def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
+    for dataset in datasets:
+        check_dataset(dataset, retrievable=True) # dataset integrity check
+        dataset_id = dataset.get('pid')
+        access_token = {'access_token': token}
+
+        # mark dataset as being retrieved
+        r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
+                     params=access_token | {"datasetlifecycle": {"retrieveStatusMessage": "started"}})
+        check_request_response(r, "can't mark dataset as being retrieved")
+
+        # mark dataset as retrieved
+        r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
+                     params=access_token | {"datasetlifecycle": {"retrieveStatusMessage": "datasetRetrieved"}})
+        check_request_response(r, "can't mark dataset as being retrieved")
+
+
+    # mark job as successfully finished
+    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), 
+                     json={"jobStatusMessage": "finishedSuccessful"}, 
+                     params=access_token)
+    check_request_response(r, "can't mark job as finished")
+    pass
