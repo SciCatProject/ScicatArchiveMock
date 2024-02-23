@@ -2,7 +2,7 @@ import requests
 from pathlib import Path
 from typing import Union
 from scicat_ingestion import create_dataset, dataset_check, IngestionException
-from scicat_archival import create_job, forward_job, handle_job, ArchivalMockException
+from scicat_archival import create_job, forward_job, handle_archive_job, ArchivalMockException
 import yaml
 import os
 
@@ -54,7 +54,7 @@ def ingest_and_archive_datasets_in_folder(dataset_src: Path, base_url: str, toke
             dataset_id, file_list = create_dataset(dataset_src / d, base_url, token, transfer_config, file_paths=file_paths)
             job_id = create_job(base_url, token, dataset_pid=dataset_id, dataset_files=file_list)
             datasets = forward_job(base_url, token, job_id)[1]
-            handle_job(base_url, token, job_id, datasets)
+            handle_archive_job(base_url, token, job_id, datasets)
         except (IngestionException, ArchivalMockException) as e:
             print("Failed: '{}'".format(e))
             continue

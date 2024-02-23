@@ -10,8 +10,8 @@ def check_request_response(r: requests.Response, msg: str):
     if not r.status_code == 200:
         raise ArchivalMockException("{}: {} - {}".format(msg, r.status_code, r.reason))
 
-def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: str = "", dataset_files: list[str] = [], 
-               dataset_list: Union[None, list] = None) -> None:
+def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: str = "", 
+               dataset_files: list[str] = [], dataset_list: Union[None, list] = None) -> None:
     # NOTE: if you want to send more than one dataset per job, you must use dataset_list
     #   otherwise use dataset pid and dataset files for a "general case"
     # NOTE: when creating an archival (and likely retrieval) job, the datasetLifecycle is automatically updated by
@@ -45,7 +45,8 @@ def forward_job(base_url: str, token: str, job_id: str) -> tuple[str, list[dict]
         raise ArchivalMockException("unexpected response or empty list: {}".format(dataset_list))
     r = requests.get(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), params=access_token)
     job_type = r.json().get('type')
-    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), json={"jobStatusMessage": "jobForwarded"}, params=access_token)
+    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), 
+                     json={"jobStatusMessage": "jobForwarded"}, params=access_token)
     check_request_response(r, "can't mark job as forwarded")
     return job_type, dataset_list
 
@@ -56,52 +57,59 @@ def check_dataset(dataset: dict, archivable: bool = False, retrievable: bool = F
     dataset_id = dataset.get('pid')
     if dataset_id is None or not isinstance(dataset_lifecycle, dict):
         raise ArchivalMockException("dataset is invalid: {}".format(dataset))
-    if (archivable and not dataset_lifecycle.get('archivable')) or \
-       (retrievable and not dataset_lifecycle.get('retrievable')):
+    if not ((archivable == dataset_lifecycle.get('archivable')) or \
+           (retrievable == dataset_lifecycle.get('retrievable'))):
         raise ArchivalMockException("dataset is incompatible with desired operation: {}".format(dataset))
 
 
 
-def handle_job(base_url: str, token: str, job_id: str, datasets: list, retrieval: bool = False) -> None:
+def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
     access_token = {'access_token': token}
-    # send datablocks (if archiving)
-    if not retrieval:
-        for dataset in datasets:
-            check_dataset(dataset)
-            dataset_id = dataset.get('pid')
-            r = requests.get(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                             params=access_token | {"filter": '{"include": [{"relation": "origdatablocks"}]}'})
-            check_request_response(r, "can't get origdatablocks of dataset")
-            orig_datablocks = r.json().get('origdatablocks')
-            if not isinstance(orig_datablocks, list): 
-                ArchivalMockException("invalid orig datablocks for dataset: {}".format(dataset_id))
-            for orig_datablock in orig_datablocks:
-                # create datablock by adapting orig datablock (it's a mock after all)
-                datablock = dict(orig_datablock)
-                datablock.pop('createdBy', None)
-                datablock.pop('updatedBy', None)
-                datablock.pop('createdAt', None)
-                datablock.pop('updatedAt', None)
-                od_id = datablock.pop('id', None)
-                if od_id is None:
-                    ArchivalMockException("OrigDatablock doesn't have id for dataset {}".format(dataset_id))
-                datablock['archiveId'] = '/archive/{}.tar'.format(od_id)
-                datablock['packedSize'] = datablock.get('size')
-                datablock['chkAlg'] = 'sha1'
-                datablock['version'] = '2.0.2'
-                # send datablock
-                r = requests.post(url=base_url+'/Datablocks', params=access_token, json=datablock)
-                check_request_response(r, "can't create datablock for orig datablock {} in dataset {}".format(od_id, dataset_id))
-                
-    # mark datasets as archived/retrieved
     for dataset in datasets:
-        check_dataset(dataset)
-        r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                 params=access_token | {"datasetlifecycle": {"archivable": not retrieval, "retrievable": 
-                                                             retrieval, "archiveStatusMessage": "started"}})
-        check_request_response(r, "can't mark dataset as being archived/retrieved")
+        check_dataset(dataset) # dataset integrity check
+        dataset_id = dataset.get('pid')
 
-    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), json={"jobStatusMessage": "finishedSuccessful"}, 
+        # 1 - mark datasets as being archived
+        r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
+                         params=access_token | {"datasetlifecycle": {"archivable": False, "retrievable": 
+                                                             False, "archiveStatusMessage": "started"}})
+        check_request_response(r, "can't mark dataset as being archived")
+
+        # 2 - send datablocks
+        r = requests.get(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
+                         params=access_token | {"filter": '{"include": [{"relation": "origdatablocks"}]}'})
+        check_request_response(r, "can't get origdatablocks of dataset")
+        orig_datablocks = r.json().get('origdatablocks')
+        if not isinstance(orig_datablocks, list): 
+            ArchivalMockException("invalid orig datablocks for dataset: {}".format(dataset_id))
+        for orig_datablock in orig_datablocks:
+            # create datablock by adapting orig datablock (it's a mock after all)
+            datablock = dict(orig_datablock)
+            datablock.pop('createdBy', None)
+            datablock.pop('updatedBy', None)
+            datablock.pop('createdAt', None)
+            datablock.pop('updatedAt', None)
+            od_id = datablock.pop('id', None)
+            if od_id is None:
+                ArchivalMockException("OrigDatablock doesn't have id for dataset {}".format(dataset_id))
+            datablock['archiveId'] = '/archive/{}.tar'.format(od_id)
+            datablock['packedSize'] = datablock.get('size')
+            datablock['chkAlg'] = 'sha1'
+            datablock['version'] = '2.0.2'
+            # send datablock
+            r = requests.post(url=base_url+'/Datablocks', params=access_token, json=datablock)
+            check_request_response(r, "can't create datablock for orig datablock {} in dataset {}".format(od_id, 
+                                                                                                          dataset_id))
+        
+        # 3 - mark datasets as archived
+        r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
+                 params=access_token | {"datasetlifecycle": {"archivable": False, "retrievable": 
+                                                             True, "archiveStatusMessage": "datasetOnArchiveDisk"}})
+        check_request_response(r, "can't mark dataset as archived")
+
+    # mark job as successfully finished
+    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), 
+                     json={"jobStatusMessage": "finishedSuccessful"}, 
                      params=access_token)
     check_request_response(r, "can't mark job as finished")
     return
