@@ -2,7 +2,7 @@ import requests
 from pathlib import Path
 from typing import Union
 from scicat_ingestion import create_dataset, dataset_check, IngestionException
-from scicat_archival import create_job, finalize_dataset, ArchivalMockException
+from scicat_archival import create_job, forward_job, handle_job, ArchivalMockException
 import yaml
 import os
 
@@ -34,7 +34,7 @@ def dataset_file_list_creator(path: Path) -> list[str]:
     return sub_paths
 
 
-def mock_datasets_in_folder(dataset_src: Path, base_url: str, token: str):    
+def ingest_and_archive_datasets_in_folder(dataset_src: Path, base_url: str, token: str):    
     for d in os.listdir(dataset_src):
         if not os.path.isfile(dataset_src / d / "transfer.yaml"):
             continue
@@ -52,8 +52,9 @@ def mock_datasets_in_folder(dataset_src: Path, base_url: str, token: str):
         try:
             #dataset_check(base_url, token, dataset_src.resolve() / d)
             dataset_id, file_list = create_dataset(dataset_src / d, base_url, token, transfer_config, file_paths=file_paths)
-            create_job(base_url, token, dataset_pid=dataset_id, dataset_files=file_list)
-            finalize_dataset()
+            job_id = create_job(base_url, token, dataset_pid=dataset_id, dataset_files=file_list)
+            datasets = forward_job(base_url, token, job_id)[1]
+            handle_job(base_url, token, job_id, datasets)
         except (IngestionException, ArchivalMockException) as e:
             print("Failed: '{}'".format(e))
             continue
@@ -91,6 +92,6 @@ if __name__ == "__main__":
                                                                                                         r.reason))
             exit(-1)
 
-    mock_datasets_in_folder(path_to_datasets, base_url, token)
+    ingest_and_archive_datasets_in_folder(path_to_datasets, base_url, token)
     
     print("Exiting.")
