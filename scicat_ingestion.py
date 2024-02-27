@@ -6,6 +6,7 @@ from typing import Union
 from datetime import datetime
 import os
 import requests
+import yaml
 
 class IngestionException(Exception):
     pass
@@ -17,11 +18,21 @@ def dataset_check(base_url: str, token: str, file_path: Path):
     if len(result) > 0: raise IngestionException("already exists")
     return (True, "")
 
-def create_dataset(path: Path, base_url: str, token: str, transfer_config: dict[str: any] = [], 
-                   file_paths: list[str] = []) -> tuple[str, list[str]]:
+def dataset_file_list_creator(path: Path) -> list[str]:
+    sub_paths = [] # Collect all files in sub directories
+    for root, dirs, files in os.walk(path):
+        sub_paths += [os.path.join(root,i) for i in files if "transfer.yaml" not in i or not Path(root) == path]
+        #print("AAAAA", root, path, Path(root) == path)
+    return sub_paths
+
+def create_dataset(path: Path, base_url: str, token: str) -> tuple[str, list[str]]:
     # Create a client object. The account used should have the ingestor role in SciCat
     scicat = ScicatClient(base_url=base_url, token=token)
 
+    file_paths = dataset_file_list_creator(path)
+
+    with open(path / "transfer.yaml") as fd:
+        transfer_config = yaml.safe_load(fd)
 
     # Create a RawDataset object with settings for your choosing. Notice how
     # we pass the `ownable` instance.
