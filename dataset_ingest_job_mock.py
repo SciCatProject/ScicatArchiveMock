@@ -1,35 +1,10 @@
-import requests
 from pathlib import Path
-from typing import Union
+from scicat_common import scicat_username_login
 from scicat_ingestion import create_dataset, dataset_check, IngestionException
 from scicat_archival import create_job, forward_job, handle_archive_job, ArchivalMockException
-import yaml
 import os
 
-def scicat_login_with_user_pw(base_url: str, username: str, pw: str) -> Union[str, None]:
-    # Create a client object.
-    login_json = {
-        'username': user,
-        'password': pw,
-        'rememberMe': True
-    }
-    r = requests.post(base_url + '/Users/login', json=login_json)
-    if r.status_code == 200:
-        response = r.json()
-        if response is not None:    
-            # return login token
-            return response['id']
-        else:
-            print("ERR: invalid response from server")
-            return None
-    else:
-        print("ERR: login request failed: ", r.status_code, r.reason)
-        return None
-
-
-
-
-def ingest_and_archive_datasets_in_folder(dataset_src: Path, base_url: str, token: str):    
+def ingest_and_archive_datasets_in_folder(dataset_src: Path, base_url: str, token: str, dataset_check: bool):    
     for d in os.listdir(dataset_src):
         if not os.path.isfile(dataset_src / d / "transfer.yaml"):
             continue
@@ -40,10 +15,10 @@ def ingest_and_archive_datasets_in_folder(dataset_src: Path, base_url: str, toke
         #   the behaviour that would happen normally
         print("Ingesting and archiving dataset at {}... ".format(d), end="")
         try:
-            #dataset_check(base_url, token, dataset_src.resolve() / d)
+            if dataset_check: dataset_check(base_url, token, dataset_src.resolve() / d)
             dataset_id, file_list = create_dataset(dataset_src / d, base_url, token)
             job_id = create_job(base_url, token, dataset_pid=dataset_id, dataset_files=file_list)
-            datasets = forward_job(base_url, token, job_id)[1]
+            datasets = forward_job(base_url, token, job_id)
             handle_archive_job(base_url, token, job_id, datasets)
         except (IngestionException, ArchivalMockException) as e:
             print("Failed: '{}'".format(e))
@@ -55,8 +30,8 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(
         prog="SciCat Job Creator/Handler",
-        description="This application creates and handles jobs on SciCat in order to manipulate the state \
-            of Datasets' archival",
+        description="This application ingests datasets in a folder, creates archival jobs for them and handles said \
+              jobs on SciCat in order to test its API",
         epilog="Refer to README.md to learn more"
     )
 
@@ -65,6 +40,7 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--password")
     parser.add_argument("-t", "--token")
     parser.add_argument("--path", required=True)
+    parser.add_argument("--check-dataset-duplication", action='store_true')
     args = parser.parse_args()
     
     base_url = args.baseurl
@@ -72,16 +48,11 @@ if __name__ == "__main__":
     password = args.password
     token = args.token
     path_to_datasets = Path(args.path)
+    dataset_duplication_check = args.check_dataset_duplication
 
     if token is None:
-        r = requests.post(base_url + "/Users/login", json={"username": "admin", "password": "2jf70TPNZsS"})
-        if r.status_code == 200:
-            token = r.json()['id']
-        else:
-            print("ERROR: cannot login with provided credentials and base url, reason: {} - {}".format(r.status_code,
-                                                                                                        r.reason))
-            exit(-1)
+        token = scicat_username_login(base_url, user, password)
 
-    ingest_and_archive_datasets_in_folder(path_to_datasets, base_url, token)
+    ingest_and_archive_datasets_in_folder(path_to_datasets, base_url, token, dataset_duplication_check)
     
     print("Exiting.")

@@ -1,14 +1,11 @@
 from typing import Union, Any
+from scicat_common import check_request_response
 import requests
 from datetime import datetime
 import urllib.parse
 
 class ArchivalMockException(Exception):
     pass
-
-def check_request_response(r: requests.Response, msg: str) -> None:
-    if not r.status_code == 200:
-        raise ArchivalMockException("{}: {} - {}".format(msg, r.status_code, r.reason))
 
 # simulates dataIngestion for creating the job
 def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: str = "", 
@@ -32,25 +29,23 @@ def create_job(base_url: str, token: str, retrieval: bool = False, dataset_pid: 
             "type": "retrieve" if retrieval else "archive",
             "datasetList": dataset_list,
         }
-    params = {'access_token': token}
-    r = requests.post(url=base_url+'/Jobs', params=params, json=job_json)
+    access_token = {'access_token': token}
+    r = requests.post(url=base_url+'/Jobs', params=access_token, json=job_json)
     check_request_response(r, "can't create job")
     return r.json().get('id')
 
-# simulates node-red/mq for forwarding jobs
-def forward_job(base_url: str, token: str, job_id: str) -> tuple[str, list[dict]]:
+# simulates node-red for forwarding jobs
+def forward_job(base_url: str, token: str, job_id: str) -> list[dict]:
     access_token = {'access_token': token}
     r = requests.get(url=base_url+'/Jobs/datasetDetails', params={'jobId': job_id} | access_token)
     check_request_response(r, "can't get job's dataset details")
     dataset_list = r.json()
     if not isinstance(dataset_list, list) or dataset_list == []:
         raise ArchivalMockException("unexpected response or empty list: {}".format(dataset_list))
-    r = requests.get(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), params=access_token)
-    job_type = r.json().get('type')
     r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), 
                      json={"jobStatusMessage": "jobForwarded"}, params=access_token)
     check_request_response(r, "can't mark job as forwarded")
-    return job_type, dataset_list
+    return dataset_list
 
 def check_dataset(dataset: dict, archivable: bool = False, retrievable: bool = False):
     if not isinstance(dataset, dict):
@@ -71,9 +66,9 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
         dataset_id = dataset.get('pid')
 
         # 1 - mark datasets as being archived
+        # TODO: this doesn't change ANYTHING on scicat for some reason??
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                         params=access_token | {"datasetlifecycle": {"archivable": False, "retrievable": 
-                                                             False, "archiveStatusMessage": "started"}})
+                         params=access_token | {"datasetlifecycle": {"archiveStatusMessage": "started"}})
         check_request_response(r, "can't mark dataset as being archived")
 
         # 2 - send datablocks
@@ -100,12 +95,14 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
             # send datablock
             r = requests.post(url=base_url+'/Datablocks', params=access_token, json=datablock)
             check_request_response(r, "can't create datablock for orig datablock {} in dataset {}".format(od_id, 
-                                                                                                          dataset_id))
+                                                                                                          dataset_id
+                                                                                                          ))
         
         # 3 - mark datasets as archived
+        # TODO: this doesn't change ANYTHING on scicat for some reason??
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                 params=access_token | {"datasetlifecycle": {"archivable": False, "retrievable": 
-                                                             True, "archiveStatusMessage": "datasetOnArchiveDisk"}})
+                 params=access_token | {"datasetlifecycle": {"retrievable": True, 
+                                                             "archiveStatusMessage": "datasetOnArchiveDisk"}})
         check_request_response(r, "can't mark dataset as archived")
 
     # mark job as successfully finished
@@ -130,7 +127,7 @@ def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) 
         # mark dataset as retrieved
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
                      params=access_token | {"datasetlifecycle": {"retrieveStatusMessage": "datasetRetrieved"}})
-        check_request_response(r, "can't mark dataset as being retrieved")
+        check_request_response(r, "can't mark dataset as retrieved")
 
 
     # mark job as successfully finished
