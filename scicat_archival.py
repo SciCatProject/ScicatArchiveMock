@@ -66,9 +66,8 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
         dataset_id = dataset.get('pid')
 
         # 1 - mark datasets as being archived
-        # TODO: this doesn't change ANYTHING on scicat for some reason??
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                         params=access_token | {"datasetlifecycle": {"archiveStatusMessage": "started"}})
+                         params=access_token, json={"datasetlifecycle": {"archiveStatusMessage": "started"}})
         check_request_response(r, "can't mark dataset as being archived")
 
         # 2 - send datablocks
@@ -99,10 +98,9 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
                                                                                                           ))
         
         # 3 - mark datasets as archived
-        # TODO: this doesn't change ANYTHING on scicat for some reason??
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                 params=access_token | {"datasetlifecycle": {"retrievable": True, 
-                                                             "archiveStatusMessage": "datasetOnArchiveDisk"}})
+                 params=access_token, json={"datasetlifecycle": {"retrievable": True, 
+                                                                 "archiveStatusMessage": "datasetOnArchiveDisk"}})
         check_request_response(r, "can't mark dataset as archived")
 
     # mark job as successfully finished
@@ -112,7 +110,6 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
     check_request_response(r, "can't mark job as finished")
     return
 
-# NOTE: this function is untested for now
 def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
     for dataset in datasets:
         check_dataset(dataset, retrievable=True) # dataset integrity check
@@ -121,12 +118,12 @@ def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) 
 
         # mark dataset as being retrieved
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                     params=access_token | {"datasetlifecycle": {"retrieveStatusMessage": "started"}})
+                     params=access_token, json={"datasetlifecycle": {"retrieveStatusMessage": "started"}})
         check_request_response(r, "can't mark dataset as being retrieved")
 
         # mark dataset as retrieved
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
-                     params=access_token | {"datasetlifecycle": {"retrieveStatusMessage": "datasetRetrieved"}})
+                     params=access_token, json={"datasetlifecycle": {"retrieveStatusMessage": "datasetRetrieved"}})
         check_request_response(r, "can't mark dataset as retrieved")
 
 
