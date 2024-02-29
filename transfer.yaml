@@ -1,0 +1,29 @@
+accessGroups:
+- a_group
+- b_group
+- c_group
+attachments:
+# NOTE: files described here must be present in the dataset!
+- caption: (d)ragoning image
+  path: thumbnail/167915.jpg
+  type: jpg
+contactEmail: another@uni.org
+creationLocation: University
+datasetName: Loot Dataset
+description: 'Example description'
+instrumentGroup: exampleInstrumentGroup
+isPublished: false
+keywords:
+- keyword1
+- keyword2
+license: Some License
+ownerGroup: anothergroup
+owners:
+- email: example@university.net
+  name: Another researcher
+  orcid: https://orcid.org/0111-9996-1825-1136
+principalInvestigators:
+- A Researcher
+- Another Researcher
+sampleId: anotherIdExample356
+validationStatus: uncertain
