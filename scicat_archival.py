@@ -61,6 +61,11 @@ def check_dataset(dataset: dict, archivable: bool = False, retrievable: bool = F
 # simulates AREMA for archival registering
 def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
     access_token = {'access_token': token}
+    # mark job as being handled
+    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), params=access_token, 
+                     json={"jobStatusMessage": "inProgress"})
+    check_request_response(r, "can't mark job as being in progress")
+
     for dataset in datasets:
         check_dataset(dataset) # dataset integrity check
         dataset_id = dataset.get('pid')
@@ -111,10 +116,14 @@ def handle_archive_job(base_url: str, token: str, job_id: str, datasets: list) -
     return
 
 def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) -> None:
+    access_token = {'access_token': token}
+    # mark job as being handled
+    r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), params=access_token, 
+                 json={"jobStatusMessage": "inProgress"})
+
     for dataset in datasets:
         check_dataset(dataset, retrievable=True) # dataset integrity check
         dataset_id = dataset.get('pid')
-        access_token = {'access_token': token}
 
         # mark dataset as being retrieved
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
@@ -125,7 +134,6 @@ def handle_retrieve_job(base_url: str, token: str, job_id: str, datasets: list) 
         r = requests.put(url=base_url+'/Datasets/'+urllib.parse.quote(dataset_id, safe=''), 
                      params=access_token, json={"datasetlifecycle": {"retrieveStatusMessage": "datasetRetrieved"}})
         check_request_response(r, "can't mark dataset as retrieved")
-
 
     # mark job as successfully finished
     r = requests.put(url=base_url+'/Jobs/'+urllib.parse.quote(job_id, safe=''), 
