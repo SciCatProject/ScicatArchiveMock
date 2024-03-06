@@ -6,7 +6,7 @@ from scicat_archival import forward_job, handle_archive_job, handle_retrieve_job
 class JobHandlerException(Exception):
     pass
 
-def main(base_url: str, token: str):
+def main(scicat_url: str, rabbitmq_url: str, token: str):
     def job_callback(ch, method, properties, body: bytes):
         print("Job received... ", end='')
         job = json.loads(body)
@@ -18,9 +18,9 @@ def main(base_url: str, token: str):
             return
         print("handling {}... ".format(job_id), end='')
         try:
-            dataset_list =                       forward_job(base_url, token, job_id)
-            if   job_type ==  'archive':  handle_archive_job(base_url, token, job_id, dataset_list)
-            elif job_type == 'retrieve': handle_retrieve_job(base_url, token, job_id, dataset_list)
+            dataset_list =                       forward_job(scicat_url, token, job_id)
+            if   job_type ==  'archive':  handle_archive_job(scicat_url, token, job_id, dataset_list)
+            elif job_type == 'retrieve': handle_retrieve_job(scicat_url, token, job_id, dataset_list)
             else: 
                 print("ERR: Invalid job type provided (skipped). Received: {}".format(job))
                 return
@@ -29,7 +29,7 @@ def main(base_url: str, token: str):
             return
         print("DONE.")
     
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+    connection = pika.BlockingConnection(pika.ConnectionParameters(host=rabbitmq_url))
     channel = connection.channel()
     channel.queue_declare(queue='client.jobs.write', durable=True)
     channel.basic_consume(queue='client.jobs.write', on_message_callback=job_callback, auto_ack=True)
@@ -45,22 +45,24 @@ if __name__ == '__main__':
         description="This application acts as a RabbitMQ client to mock the handling of archival/retrieval jobs",
         epilog="Refer to README.md to learn more"
     )
-    parser.add_argument("-b", "--baseurl", required=True)
+    parser.add_argument("--scicat-url", required=True)
+    parser.add_argument("--rabbitmq-url", required=True)
     parser.add_argument("-u", "--user")
     parser.add_argument("-p", "--password")
     parser.add_argument("-t", "--token")
     args = parser.parse_args()
 
-    base_url = args.baseurl
+    scicat_url = args.scicat_url
+    rabbitmq_url = args.rabbitmq_url
     user = args.user
     password = args.password
     token = args.token
 
     if token is None:
-        token = scicat_username_login(base_url, user, password)
+        token = scicat_username_login(scicat_url, user, password)
 
     try:
-        main(base_url, token)
+        main(scicat_url, rabbitmq_url, token)
     except KeyboardInterrupt:
         print('Interrupted')
         try:
