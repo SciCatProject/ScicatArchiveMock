@@ -58,7 +58,7 @@ if __name__ == '__main__':
     password = args.password
     token = args.token
 
-    if token is None:
+    if token is None or token == "":
         token = scicat_username_login(scicat_url, user, password)
 
     try:
