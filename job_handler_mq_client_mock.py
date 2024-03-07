@@ -1,6 +1,6 @@
 import pika, sys, os
 import json
-from scicat_common import scicat_username_login
+from scicat_common import scicat_username_login, ScicatException
 from scicat_archival import forward_job, handle_archive_job, handle_retrieve_job, ArchivalMockException
 
 class JobHandlerException(Exception):
@@ -24,7 +24,7 @@ def main(scicat_url: str, rabbitmq_url: str, token: str):
             else: 
                 print("ERR: Invalid job type provided (skipped). Received: {}".format(job))
                 return
-        except ArchivalMockException as e:
+        except (ArchivalMockException, ScicatException) as e:
             print("ERR: Archival failed for {} (skipped): {}".format(job_id, e))
             return
         print("DONE.")
