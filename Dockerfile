@@ -22,4 +22,4 @@ RUN apk add python3 py3-pip curl && \
 USER ${USERNAME}
 WORKDIR /job_mock
 ENV PATH="/job_mock/venv/bin:$PATH"
-CMD python -u run.py --scicat-url "${SCICAT_URL}" --rabbitmq-url "${RABBITMQ_URL}" -u "${USERNAME}" -p "${PASSWORD}" -t "${TOKEN}"
+CMD python -u run.py --scicat-url "${SCI_URL}" --scicat-user "${SCI_USER}" --scicat-password "${SCI_PW}" --scicat-token "${TOKEN}" --rabbitmq-url "${RMQ_URL}" --rabbitmq-user "${RMQ_USER}" --rabbitmq-password "${RMQ_PW}"
